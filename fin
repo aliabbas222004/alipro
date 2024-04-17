@@ -19,4 +19,65 @@ create table mall_supplier_details(mall_id number(5) constraint fl_m_id_1 refere
 create table mall_orders(order_id number(5) constraint pk_o_id primary key,order_qty number(10),order_dt date,mall_id number(5),item_id number(5),warehouse_id number(5),constraint fk_m_i_id foreign key(mall_id,warehouse_id,item_id) references mall_supplier_details(mall_id,warehouse_id,item_id));
 
 
+/cal function/
+
+create or replace function calprice(it item.item_id%type,qty warehouse_bills.order_qty%type) return number
+as
+a number(5);
+begin
+select price into a from item where item_id=it;
+return a*qty;
+exception
+when no_data_found then return 0;
+end calprice;
+/
+
+/checkstock func/
+
+create or replace function checkstock(m mall.mall_id%type,i item.item_id%type,qty_req number) return boolean
+as 
+a mall_items.available_qty%type;
+b boolean;
+begin
+select available_qty into a from mall_items where mall_id=m and item_id=i;
+if a>qty_req then b:=false;
+else b:=true;
+end if;
+return b;
+exception
+when no_data_found then return false;
+end checkstock;
+/
+
+
+/generate mall orders/
+
+create or replace procedure generatemallorder(m mall.mall_id%type,i item.item_id%type)
+is
+reorder mall_items.reorder_level%type;
+o mall_orders.order_id%type;
+w warehouse.warehouse_id%type;
+begin
+select reorder_level into reorder from mall_items where mall_id=m and item_id=i;
+select max(order_id) into o from mall_orders;
+select warehouse_id into w from mall_supplier_details where mall_id=m and item_id=i;
+o:=o+1;
+insert into mall_orders values(o,reorder,sysdate,m,i,w);
+end generatemallorder;
+/
+
+/updatestock/
+
+create or replace procedure updatewarehousestock(w warehouse.warehouse_id%type,i item.item_id%type)
+is
+r warehouse_items%rowtype;
+o warehouse_bills.order_qty%type;
+b warehouse_bills.bill_status%type;
+begin
+select order_qty,bill_status into o,b from warehouse_bills where warehouse_id=w and item_id=i;
+if upper(b)='PAID' then
+    update warehouse_items set available_qty=nvl(available_qty,0)+o where warehouse_id=w and item_id=i;
+end if;
+end updatewarehousestock;
+/
 
