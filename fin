@@ -81,3 +81,44 @@ end if;
 end updatewarehousestock;
 /
 
+/trigger to generate mall order/
+
+create or replace trigger m1
+after update on mall_items for each row
+declare
+	temp_ord_qty number;temp_r_lvl number;
+begin
+	select :new.available_qty,reorder_level into temp_ord_qty,temp_r_lvl from mall_items where item_id=:new.item_id and mall_id=:new.mall_id;
+
+	if temp_ord_qty < temp_r_lvl then
+        generatemallorder(:new.mall_id,:new.item_id);
+    end if;
+end m1; 
+
+
+/prosedure to genrate wareorder/
+
+create or replace procedure generatewareorder(w warehouse.warehouse_id%type,i item.item_id%type)
+is
+reorder warehouse_items.reorder_level%type;
+o warehouse_bills.bill_id%type;
+s warehouse_supplier_details.s_id%type;
+begin
+select reorder_level into reorder from warehouse_items where warehouse_id=w and item_id=i;
+select max(bill_id) into o from warehouse_bills;
+select max(s_id) into s from warehouse_supplier_details where warehouse_id=w and item_id=i;
+o:=o+1;
+insert into warehouse_bills values(o,w,i,s,reorder,sysdate,calprice(i,reorder),'PAID');
+end generatewareorder;
+
+
+/trigger to update warestock/
+
+create or replace trigger t1 
+after insert on warehouse_bills for each row
+declare
+
+begin
+updatewarehousestock(:new.warehouse_id,:new.item_id);
+end t1;
+/
