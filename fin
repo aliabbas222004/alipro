@@ -1,0 +1,22 @@
+create table warehouse(warehouse_id number(5) constraint pk_i_id primary key,warehouse_loc varchar2(20) constraint nn_i_loc not null);
+
+create table mall(mall_id number(5) constraint pk_m_id primary key,mall_loc varchar2(20) constraint nn_m_loc not null);
+
+create table item(item_id number(5) constraint pk_it_id primary key, it_name varchar2(20) not null,measuring_unit varchar2(20),price number(10),expiry_dt date,constraint ck_m_u check(upper(measuring_unit) in ('TONNES','KILOGRAMS','GRAMS','LITRES','NUMBER')));
+
+create table supplier(s_id number(5) constraint pk_s_id primary key,s_name varchar2(20),s_loc varchar2(20) not null,contact_no number(10) constraint ck_c_no check(length(contact_no)=10));
+
+create table warehouse_items(warehouse_id number(5) constraint fk_i_id_2 references warehouse(warehouse_id),item_id number(5) constraint fk_it_id_1 references item(item_id),available_qty number(10),reorder_level number(10),constraint pk_i_it primary key(warehouse_id,item_id));
+
+create table mall_items(mall_id number(5) constraint fl_m_id_2 references mall(mall_id),item_id number(5) constraint fk_it_id_2 references item(item_id),available_qty number(10),reorder_level number(10),constraint pk_m_it primary key(mall_id,item_id));
+
+create table warehouse_supplier_details(warehouse_id number(5) constraint fk_i_id_3 references warehouse(warehouse_id),item_id number(5) constraint fk_it_id_3 references item(item_id),s_id number(5) constraint fk_s_id_1 references supplier(s_id),constraint pk_i_s primary key(warehouse_id,item_id,s_id));
+
+create table warehouse_bills(bill_id number(5) constraint pk_bill_id primary key,warehouse_id number(5),s_id number(5),item_id number(5),order_qty number(10),order_dt date,tot_price number(10),bill_status varchar2(20) constraint ck_b_s check(upper(bill_status) in ('PAID','UNPAID')),constraint fk_in_s_it foreign key(warehouse_id,s_id,item_id) references warehouse_supplier_details(warehouse_id,s_id,item_id));
+
+create table mall_supplier_details(mall_id number(5) constraint fl_m_id_1 references mall(mall_id),warehouse_id number(5) constraint fk_i_id_1 references warehouse(warehouse_id),item_id number(5) constraint fk_it_id_4 references item(item_id),constraint pk_m_i_it primary key(mall_id,warehouse_id,item_id));
+
+create table mall_orders(order_id number(5) constraint pk_o_id primary key,order_qty number(10),order_dt date,mall_id number(5),item_id number(5),warehouse_id number(5),constraint fk_m_i_id foreign key(mall_id,warehouse_id,item_id) references mall_supplier_details(mall_id,warehouse_id,item_id));
+
+
+
