@@ -122,3 +122,20 @@ begin
 updatewarehousestock(:new.warehouse_id,:new.item_id);
 end t1;
 /
+
+
+create or replace trigger t4
+after insert on mall_orders for each row
+declare
+	m mall_orders.order_qty%type;
+a warehouse_items.available_qty%type;
+r warehouse_items.reorder_level%type;
+begin
+	select available_qty,reorder_level into a,r from warehouse_items where warehouse_id=:new.warehouse_id and item_id=:new.item_id;
+if a<:new.order_qty then dbms_output.put_line('Waiting for stock');
+else
+    if a-:new.order_qty<r then generatewareorder(:new.warehouse_id,:new.item_id);
+	end if;
+	update warehouse_items set available_qty=a-:new.order_qty where warehouse_id=:new.warehouse_id and item_id=:new.item_id;
+end if;
+end before_insert_new_ord_on_mallord; 
