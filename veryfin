@@ -1,0 +1,127 @@
+create table mall_up(mall_id number(5) constraint fl_m_id_6 references mall(mall_id),item_id number(5) constraint fk_it_id_6 references item(item_id),qty_updat number(10));
+
+
+CREATE OR REPLACE PROCEDURE update_mall_item_quantity(mall_id_in IN mall.mall_id%TYPE,item_id_in IN item.item_id%TYPE,quantity_increase IN NUMBER) AS
+BEGIN
+    UPDATE mall_items SET available_qty = available_qty + quantity_increase WHERE mall_id = mall_id_in AND item_id = item_id_in;
+    COMMIT;
+END update_mall_item_quantity;
+
+create or replace procedure generatemallorder(m mall.mall_id%type,i item.item_id%type)
+is
+reorder mall_items.reorder_level%type;
+o mall_orders.order_id%type;
+w warehouse.warehouse_id%type;
+begin
+select reorder_level into reorder from mall_items where mall_id=m and item_id=i;
+select max(order_id) into o from mall_orders;
+o:=nvl(o,0)+1;
+select warehouse_id into w from mall_supplier_details where mall_id=m and item_id=i;
+insert into mall_orders values(o,reorder,sysdate,m,i,w);
+end generatemallorder;
+
+
+create or replace trigger m1
+after insert on mall_up for each row
+declare
+	a mall_items.available_qty%type;
+    pragma autonomous_transaction;
+	temp_ord_qty number;temp_r_lvl number;
+begin
+	select :new.qty_updat into temp_ord_qty from mall_up where item_id=:new.item_id and mall_id=:new.mall_id;
+select reorder_level into temp_r_lvl from mall_items where item_id=:new.item_id and mall_id=:new.mall_id;
+	if temp_ord_qty<temp_r_lvl then
+        generatemallorder(:new.mall_id,:new.item_id);
+	update mall_items set available_qty=available_qty-temp_ord_qty+reorder;
+	else
+        update mall_items set available_qty=available_qty-temp_ord_qty;
+	end if;
+	commit;
+end;
+
+create or replace function calprice(it item.item_id%type,qty warehouse_bills.order_qty%type) return number
+as
+	a number(5);
+begin
+	select price into a from item where item_id=it;
+	return a*qty;
+exception
+		when no_data_found then return 0;
+end calprice;
+
+create or replace procedure generatewareorder(w warehouse.warehouse_id%type,i item.item_id%type)
+is
+	reorder warehouse_items.reorder_level%type;
+	o warehouse_bills.bill_id%type;
+	s warehouse_supplier_details.s_id%type;
+begin
+	select reorder_level into reorder from warehouse_items where warehouse_id=w and item_id=i;
+	select max(bill_id) into o from warehouse_bills;
+	select max(s_id) into s from warehouse_supplier_details where warehouse_id=w and item_id=i;
+	o:=nvl(o,0)+1;
+	insert into warehouse_bills values(o,w,i,s,reorder,sysdate,calprice(i,reorder),'PAID');
+end generatewareorder;
+
+create or replace trigger t4
+after insert on mall_orders for each row
+declare
+    pragma autonomous_transaction;
+	m mall_orders.order_qty%type;
+	a warehouse_items.available_qty%type;
+	r warehouse_items.reorder_level%type;
+begin
+	select available_qty,reorder_level into a,r from warehouse_items where warehouse_id=:new.warehouse_id and item_id=:new.item_id;
+	if a<:new.order_qty then dbms_output.put_line('Waiting for stock');
+	else
+    	if a-:new.order_qty<r then generatewareorder(:new.warehouse_id,:new.item_id);
+		end if;
+		update warehouse_items set available_qty=a-:new.order_qty where warehouse_id=:new.warehouse_id and item_id=:new.item_id;
+	end if;
+	commit;
+end t4;
+
+create or replace procedure updatewarehousestock(w warehouse.warehouse_id%type,i item.item_id%type)
+is
+	r warehouse_items%rowtype;
+	o warehouse_bills.order_qty%type;
+	b warehouse_bills.bill_status%type;
+begin
+	select order_qty,bill_status into o,b from warehouse_bills where warehouse_id=w and item_id=i;
+	if upper(b)='PAID' then
+	    update warehouse_items set available_qty=nvl(available_qty,0)+o where warehouse_id=w and item_id=i;
+	end if;
+end updatewarehousestock;
+
+
+
+create or replace trigger t1 
+after insert on warehouse_bills for each row
+declare
+    pragma autonomous_transaction;
+begin
+	updatewarehousestock(:new.warehouse_id,:new.item_id);
+	commit;
+end t1;
+
+update mall_items set available_qty=1 where mall_id=1 and item_id=1;
+select * from mall_orders;
+select * from warehouse_items;
+select * from mall_items;
+
+
+-- commit;
+-- select * from mall_items;
+
+-- create or replace procedure generatemallorder(m mall.mall_id%type,i item.item_id%type)
+-- is
+-- reorder mall_items.reorder_level%type;
+-- o mall_orders.order_id%type;
+-- w warehouse.warehouse_id%type;
+-- begin
+-- select reorder_level,available_qty into reorder,a from mall_items where mall_id=m and item_id=i;
+-- select max(order_id) into o from mall_orders;
+-- o:=nvl(o,0)+1;
+-- select warehouse_id into w from mall_supplier_details where mall_id=m and item_id=i;
+-- insert into mall_orders values(o,reorder,sysdate,m,i,w);
+
+-- end generatemallorder;
